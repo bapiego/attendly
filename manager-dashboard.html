@@ -496,36 +496,22 @@
         const tbody = document.getElementById('attendeeTableBody');
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b; padding:2rem;">Loading...</td></tr>';
 
-        const res = await callRPC('search_attendees', {
+        const res = await callRPC('get_all_attendees', {
             p_token: sessionToken,
-            p_event_id: activeEventId,
-            p_query: ''
+            p_event_id: activeEventId
         });
 
-        console.log('search_attendees response:', JSON.stringify(res).substring(0, 500));
-
-        // Handle both array and wrapped responses
-        let rows = [];
-        if (Array.isArray(res)) {
-            rows = res;
-        } else if (res && Array.isArray(res.attendees)) {
-            rows = res.attendees;
-        } else if (res && res.success === false) {
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#64748b; padding:2rem;">Error: ${res.error || 'Unknown error'}</td></tr>`;
-            return;
-        } else {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b; padding:2rem;">Failed to load attendees.</td></tr>';
+        if (!res.success) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#64748b; padding:2rem;">${res.error || 'Failed to load attendees.'}</td></tr>`;
             return;
         }
 
-        // Parse tuples into objects
-        allAttendees = rows.map(row => {
+        allAttendees = (res.attendees || []).map(row => {
             const fields = typeof row.field_values === 'string'
                 ? JSON.parse(row.field_values)
                 : (row.field_values || {});
-            // Build display name from available fields
             const name = [fields.first_name, fields.last_name].filter(Boolean).join(' ')
-                || fields.name || row.name || '—';
+                || fields.name || '—';
             return {
                 id: row.id,
                 name,
