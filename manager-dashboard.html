@@ -507,9 +507,9 @@
         }
 
         allAttendees = (res.attendees || []).map(row => {
-            const fields = typeof row.field_values === 'string'
-                ? JSON.parse(row.field_values)
-                : (row.field_values || {});
+            const fields = typeof row.data === 'string'
+                ? JSON.parse(row.data)
+                : (row.data || {});
             const name = [fields.first_name, fields.last_name].filter(Boolean).join(' ')
                 || fields.name || '—';
             return {
