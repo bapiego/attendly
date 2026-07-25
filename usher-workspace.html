@@ -182,9 +182,16 @@
     <input type="text" id="searchInput" placeholder="Search attendees..." autocomplete="off">
   </div>
 
+  <div style="display:flex; gap:8px; margin-bottom:12px;">
+    <button id="tabSearchBtn" style="flex:1; padding:9px; border-radius:8px; border:2px solid #2c5282; background:#2c5282; color:white; font-size:13px; font-weight:600; cursor:pointer;">🔍 Search</button>
+    <button id="tabCheckedInBtn" style="flex:1; padding:9px; border-radius:8px; border:2px solid #334155; background:transparent; color:#94a3b8; font-size:13px; font-weight:600; cursor:pointer;">✓ Checked In (<span id="checkedInCount">0</span>)</button>
+  </div>
+
   <div id="resultsArea">
     <div class="empty-state">Start typing a name or other detail to find an attendee.</div>
   </div>
+
+  <div id="checkedInArea" style="display:none;"></div>
 </div>
 
 <!-- Add/Edit attendee modal -->
@@ -270,12 +277,84 @@
     const res = await callRPC('get_event_attendance_metrics', { p_token: sessionToken, p_event_id: eventId });
     if (res.success) {
       document.getElementById('totalCheckedIn').textContent = `${res.total_checked_in} / ${res.total_registered}`;
+      document.getElementById('checkedInCount').textContent = res.total_checked_in;
     }
   }
 
   // ---------- Search ----------
   const searchInput = document.getElementById('searchInput');
   const resultsArea = document.getElementById('resultsArea');
+  const checkedInArea = document.getElementById('checkedInArea');
+
+  // ---------- Tab switching ----------
+  document.getElementById('tabSearchBtn').addEventListener('click', () => {
+    document.getElementById('tabSearchBtn').style.background = '#2c5282';
+    document.getElementById('tabSearchBtn').style.borderColor = '#2c5282';
+    document.getElementById('tabSearchBtn').style.color = 'white';
+    document.getElementById('tabCheckedInBtn').style.background = 'transparent';
+    document.getElementById('tabCheckedInBtn').style.borderColor = '#334155';
+    document.getElementById('tabCheckedInBtn').style.color = '#94a3b8';
+    resultsArea.style.display = 'block';
+    checkedInArea.style.display = 'none';
+  });
+
+  document.getElementById('tabCheckedInBtn').addEventListener('click', () => {
+    document.getElementById('tabCheckedInBtn').style.background = '#0f766e';
+    document.getElementById('tabCheckedInBtn').style.borderColor = '#0f766e';
+    document.getElementById('tabCheckedInBtn').style.color = 'white';
+    document.getElementById('tabSearchBtn').style.background = 'transparent';
+    document.getElementById('tabSearchBtn').style.borderColor = '#334155';
+    document.getElementById('tabSearchBtn').style.color = '#94a3b8';
+    resultsArea.style.display = 'none';
+    checkedInArea.style.display = 'block';
+    loadCheckedIn();
+  });
+
+  async function loadCheckedIn() {
+    checkedInArea.innerHTML = '<div class="empty-state">Loading...</div>';
+    const res = await callRPC('get_all_attendees', {
+      p_token: sessionToken,
+      p_event_id: eventId
+    });
+
+    if (!res.success) {
+      checkedInArea.innerHTML = '<div class="empty-state">Failed to load.</div>';
+      return;
+    }
+
+    const checkedIn = (res.attendees || []).filter(a => a.checked_in);
+    document.getElementById('checkedInCount').textContent = checkedIn.length;
+
+    if (checkedIn.length === 0) {
+      checkedInArea.innerHTML = '<div class="empty-state">No one checked in yet.</div>';
+      return;
+    }
+
+    checkedInArea.innerHTML = '';
+    checkedIn.forEach(a => {
+      const fields = typeof a.data === 'string' ? JSON.parse(a.data) : (a.data || {});
+      const name = [fields.first_name, fields.last_name].filter(Boolean).join(' ') || '—';
+      const time = a.checked_in_at
+        ? new Date(a.checked_in_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+        : '';
+      const card = document.createElement('div');
+      card.className = 'result-card checked-in';
+      card.style.cssText = 'padding:12px 16px; margin-bottom:8px; border-radius:10px; background:rgba(16,185,129,0.08); border:1.5px solid rgba(16,185,129,0.3);';
+      card.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-weight:700; font-size:15px;">${name}</div>
+            <div style="font-size:12px; color:#64748b; margin-top:2px;">${fields.company || ''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="color:#10b981; font-weight:600; font-size:13px;">✓ Checked In</div>
+            <div style="font-size:12px; color:#64748b;">${time}</div>
+          </div>
+        </div>
+      `;
+      checkedInArea.appendChild(card);
+    });
+  }
 
   searchInput.addEventListener('input', () => {
     const query = searchInput.value.trim();
