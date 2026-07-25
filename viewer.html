@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Attendly — Live View</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f172a; --card: #1e293b; --border: #334155;
+    --text: #e2e8f0; --muted: #64748b; --accent: #3b82f6;
+    --success: #10b981; --warning: #f59e0b;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
+
+  header { background: #1e293b; border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { font-size: 18px; font-weight: 700; }
+  header .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .refresh-badge { font-size: 12px; color: var(--warning); background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); padding: 4px 10px; border-radius: 20px; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+
+  /* Metrics */
+  .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+  .metric-card { background: var(--card); border-radius: 12px; padding: 20px; border: 1px solid var(--border); }
+  .metric-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .metric-value { font-size: 36px; font-weight: 800; margin-top: 6px; }
+  .metric-value.green { color: var(--success); }
+  .progress-bar { height: 6px; background: var(--border); border-radius: 3px; margin-top: 10px; }
+  .progress-fill { height: 100%; border-radius: 3px; background: var(--success); transition: width 0.5s; }
+
+  /* Charts */
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .chart-card { background: var(--card); border-radius: 12px; padding: 20px; border: 1px solid var(--border); }
+  .chart-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 16px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  canvas { max-height: 220px; }
+
+  /* Table */
+  .table-card { background: var(--card); border-radius: 12px; padding: 20px; border: 1px solid var(--border); }
+  .table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+  .table-header h3 { font-size: 16px; font-weight: 700; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .search-input { padding: 8px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; width: 200px; }
+  .filter-select { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; }
+  .clear-btn { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; }
+  .clear-btn:hover { color: var(--text); }
+
+  .filters-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 12px; border-bottom: 2px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
+  th:hover { color: var(--text); }
+  th .sort-icon { margin-left: 4px; opacity: 0.5; }
+  td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .time-badge { font-size: 11px; color: var(--success); font-weight: 600; }
+
+  .empty { text-align: center; color: var(--muted); padding: 3rem; }
+  .footer { text-align: center; font-size: 12px; color: var(--muted); padding: 24px; }
+
+  @media (max-width: 640px) {
+    .metrics { grid-template-columns: 1fr; }
+    .charts { grid-template-columns: 1fr; }
+    .metric-value { font-size: 28px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1 id="eventName">Loading...</h1>
+    <div class="meta">Attendly — Live Check-In View</div>
+  </div>
+  <div style="display:flex; align-items:center; gap:12px;">
+    <span class="refresh-badge" id="refreshBadge">↻ Refreshing in <span id="countdown">30</span>s</span>
+    <button onclick="logout()" style="background:none; border:1px solid var(--border); color:var(--muted); padding:6px 14px; border-radius:6px; cursor:pointer; font-size:13px;">Log Out</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Metrics -->
+  <div class="metrics">
+    <div class="metric-card">
+      <div class="metric-label">Total Registered</div>
+      <div class="metric-value" id="metTotal">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Checked In</div>
+      <div class="metric-value green" id="metCheckedIn">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Progress</div>
+      <div class="metric-value" id="metProgress">—</div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts">
+    <div class="chart-card">
+      <h3>Check-ins by Hour</h3>
+      <canvas id="hourlyChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3 id="fieldChartTitle">Breakdown</h3>
+      <canvas id="fieldChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Attendee Table -->
+  <div class="table-card">
+    <div class="table-header">
+      <h3>Checked-In Attendees (<span id="filteredCount">0</span>)</h3>
+      <div class="controls">
+        <input type="text" class="search-input" id="searchInput" placeholder="Search...">
+        <button class="clear-btn" id="clearFiltersBtn">✕ Clear filters</button>
+      </div>
+    </div>
+    <div class="filters-row" id="filtersRow"></div>
+    <div style="overflow-x:auto;">
+      <table id="attendeeTable">
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<p class="footer">Powered by Marvelous Events</p>
+
+<script>
+  const SUPABASE_URL = 'https://ydijisbsoqqbcjssscck.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_PLI1DLUB_0DF3R0x3GPWYA_RNj2aScg';
+
+  let sessionToken = localStorage.getItem('session_token');
+  let allAttendees = [];
+  let fieldKeys = [];
+  let activeFilters = {};
+  let sortCol = null;
+  let sortDir = 1;
+  let hourlyChart = null;
+  let fieldChart = null;
+  let countdown = 30;
+  let countdownInterval = null;
+
+  async function callRPC(fn, payload) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY },
+      body: JSON.stringify(payload)
+    });
+    return res.json();
+  }
+
+  function logout() {
+    localStorage.removeItem('session_token');
+    localStorage.removeItem('user_role');
+    window.location.href = 'login.html';
+  }
+
+  function escapeHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ---------- Load Data ----------
+  async function loadData() {
+    if (!sessionToken) { window.location.href = 'login.html'; return; }
+
+    const res = await callRPC('get_viewer_data', { p_token: sessionToken });
+
+    if (!res.success) {
+      if (res.error?.includes('session')) { window.location.href = 'login.html'; }
+      return;
+    }
+
+    document.getElementById('eventName').textContent = res.event_name;
+    document.title = `${res.event_name} — Live View`;
+
+    const pct = res.total_registered > 0
+      ? Math.round((res.total_checked_in / res.total_registered) * 100) : 0;
+
+    document.getElementById('metTotal').textContent = res.total_registered;
+    document.getElementById('metCheckedIn').textContent = res.total_checked_in;
+    document.getElementById('metProgress').textContent = `${pct}%`;
+    document.getElementById('progressFill').style.width = `${pct}%`;
+
+    // Parse attendees
+    allAttendees = (res.attendees || []).map(a => {
+      let data = typeof a.data === 'string' ? JSON.parse(a.data) : (a.data || {});
+      return { ...a, data };
+    });
+
+    // Get field keys from first attendee
+    if (allAttendees.length > 0) {
+      fieldKeys = Object.keys(allAttendees[0].data);
+    }
+
+    renderFilters();
+    renderTable();
+    renderHourlyChart(res.hourly_checkins || []);
+    renderFieldChart();
+  }
+
+  // ---------- Filters ----------
+  function renderFilters() {
+    const row = document.getElementById('filtersRow');
+    row.innerHTML = '';
+
+    fieldKeys.forEach(key => {
+      const unique = [...new Set(allAttendees.map(a => a.data[key] || '').filter(Boolean))].sort();
+      if (unique.length < 2 || unique.length > 50) return; // skip fields with too few or too many values
+
+      const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      const sel = document.createElement('select');
+      sel.className = 'filter-select';
+      sel.dataset.field = key;
+      sel.innerHTML = `<option value="">All ${label}s</option>` +
+        unique.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+      sel.addEventListener('change', () => {
+        if (sel.value) activeFilters[key] = sel.value;
+        else delete activeFilters[key];
+        renderTable();
+      });
+      row.appendChild(sel);
+    });
+  }
+
+  document.getElementById('clearFiltersBtn').addEventListener('click', () => {
+    activeFilters = {};
+    document.querySelectorAll('.filter-select').forEach(s => s.value = '');
+    document.getElementById('searchInput').value = '';
+    renderTable();
+  });
+
+  document.getElementById('searchInput').addEventListener('input', renderTable);
+
+  // ---------- Table ----------
+  function renderTable() {
+    const search = document.getElementById('searchInput').value.trim().toLowerCase();
+
+    let filtered = allAttendees.filter(a => {
+      // Apply column filters
+      for (const [key, val] of Object.entries(activeFilters)) {
+        if ((a.data[key] || '') !== val) return false;
+      }
+      // Apply search
+      if (search) {
+        const haystack = JSON.stringify(a.data).toLowerCase() +
+          (a.checked_in_at || '').toLowerCase();
+        if (!haystack.includes(search)) return false;
+      }
+      return true;
+    });
+
+    // Sort
+    if (sortCol) {
+      filtered.sort((a, b) => {
+        const av = sortCol === 'time'
+          ? (a.checked_in_at || '') : (a.data[sortCol] || '');
+        const bv = sortCol === 'time'
+          ? (b.checked_in_at || '') : (b.data[sortCol] || '');
+        return av.localeCompare(bv) * sortDir;
+      });
+    }
+
+    document.getElementById('filteredCount').textContent = filtered.length;
+
+    // Render header
+    const thead = document.getElementById('tableHead');
+    thead.innerHTML = '';
+    const headRow = document.createElement('tr');
+    headRow.innerHTML = '<th>#</th>';
+    fieldKeys.forEach(key => {
+      const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      const th = document.createElement('th');
+      const isActive = sortCol === key;
+      th.innerHTML = `${label} <span class="sort-icon">${isActive ? (sortDir === 1 ? '▲' : '▼') : '⇅'}</span>`;
+      th.addEventListener('click', () => {
+        if (sortCol === key) sortDir *= -1;
+        else { sortCol = key; sortDir = 1; }
+        renderTable();
+      });
+      headRow.appendChild(th);
+    });
+    const timeTh = document.createElement('th');
+    timeTh.innerHTML = `Time <span class="sort-icon">${sortCol === 'time' ? (sortDir === 1 ? '▲' : '▼') : '⇅'}</span>`;
+    timeTh.addEventListener('click', () => {
+      if (sortCol === 'time') sortDir *= -1;
+      else { sortCol = 'time'; sortDir = 1; }
+      renderTable();
+    });
+    headRow.appendChild(timeTh);
+    thead.appendChild(headRow);
+
+    // Render body
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="${fieldKeys.length + 2}" class="empty">No attendees match your filters.</td></tr>`;
+      return;
+    }
+
+    filtered.forEach((a, i) => {
+      const tr = document.createElement('tr');
+      const time = a.checked_in_at
+        ? new Date(a.checked_in_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+        : '—';
+      tr.innerHTML = `<td style="color:var(--muted);">${i+1}</td>` +
+        fieldKeys.map(k => `<td>${escapeHtml(a.data[k] || '—')}</td>`).join('') +
+        `<td><span class="time-badge">✓ ${time}</span></td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ---------- Charts ----------
+  const chartDefaults = {
+    plugins: { legend: { labels: { color: '#94a3b8', font: { size: 12 } } } },
+    scales: {
+      x: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+      y: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+    }
+  };
+
+  function renderHourlyChart(hourly) {
+    const ctx = document.getElementById('hourlyChart').getContext('2d');
+    if (hourlyChart) hourlyChart.destroy();
+    hourlyChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: hourly.map(h => h.hour),
+        datasets: [{
+          label: 'Check-ins',
+          data: hourly.map(h => h.count),
+          backgroundColor: 'rgba(59,130,246,0.7)',
+          borderColor: '#3b82f6',
+          borderWidth: 1,
+          borderRadius: 4
+        }]
+      },
+      options: { ...chartDefaults, plugins: { ...chartDefaults.plugins, legend: { display: false } } }
+    });
+  }
+
+  function renderFieldChart() {
+    // Use the field with most variety (skip 'no', use company or first meaningful field)
+    const chartField = fieldKeys.find(k => k !== 'no' && k !== 'id') || fieldKeys[0];
+    if (!chartField) return;
+
+    const label = chartField.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    document.getElementById('fieldChartTitle').textContent = `By ${label} (Top 10)`;
+
+    const counts = {};
+    allAttendees.forEach(a => {
+      const val = a.data[chartField] || 'Unknown';
+      counts[val] = (counts[val] || 0) + 1;
+    });
+
+    const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0, 10);
+    const colors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16','#ec4899','#6b7280'];
+
+    const ctx = document.getElementById('fieldChart').getContext('2d');
+    if (fieldChart) fieldChart.destroy();
+    fieldChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: sorted.map(([k]) => k.length > 20 ? k.substring(0,20)+'…' : k),
+        datasets: [{
+          data: sorted.map(([,v]) => v),
+          backgroundColor: colors,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true },
+          y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  // ---------- Auto-refresh ----------
+  function startCountdown() {
+    countdown = 30;
+    clearInterval(countdownInterval);
+    countdownInterval = setInterval(() => {
+      countdown--;
+      document.getElementById('countdown').textContent = countdown;
+      if (countdown <= 0) {
+        loadData();
+        countdown = 30;
+      }
+    }, 1000);
+  }
+
+  // ---------- Init ----------
+  loadData().then(startCountdown);
+</script>
+</body>
+</html>

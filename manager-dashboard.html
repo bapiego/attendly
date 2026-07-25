@@ -351,8 +351,37 @@
             </div>
         </div>
 
-        <!-- Attendee List -->
+        <!-- Viewers Panel -->
         <div class="panel-card" style="margin-top:1.5rem;">
+          <h2>Viewers</h2>
+          <p class="subtitle" style="font-size:0.9rem; margin-bottom:1rem;">Read-only access — can see checked-in attendees and analytics.</p>
+          <div class="panel-grid">
+            <div>
+              <table>
+                <thead><tr><th>Username</th><th>Added</th><th></th></tr></thead>
+                <tbody id="viewerTableBody">
+                  <tr><td colspan="3" style="text-align:center; color:#64748b;">No viewers added yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <h3 style="font-size:1rem; margin-bottom:1rem;">Add Viewer</h3>
+              <label class="field-label">Username</label>
+              <input type="text" id="viewerUsername" placeholder="e.g. board_member" class="text-input">
+              <label class="field-label" style="margin-top:12px;">Password <a href="#" id="generateViewerPwd" style="float:right; font-size:12px; color:#f59e0b;">⚡ Generate</a></label>
+              <div style="position:relative;">
+                <input type="text" id="viewerPassword" class="text-input">
+              </div>
+              <button class="btn-primary" id="createViewerBtn" style="width:100%; margin-top:16px;">Create Viewer</button>
+              <div id="viewerCredentials" style="display:none; margin-top:12px; background:rgba(245,158,11,0.1); border:1px solid #f59e0b; border-radius:8px; padding:12px; font-size:13px;">
+                <p style="margin:0 0 6px; font-weight:600; color:#f59e0b;">✓ Viewer created — share these credentials:</p>
+                <p style="margin:2px 0;">Username: <strong id="newViewerUser"></strong></p>
+                <p style="margin:2px 0;">Password: <strong id="newViewerPwd"></strong></p>
+                <p style="margin:6px 0 0; font-size:11px; color:#94a3b8;">Login URL: <a href="viewer.html" target="_blank" style="color:#60a5fa;">attendly-89t.pages.dev/viewer</a></p>
+              </div>
+            </div>
+          </div>
+        </div>
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:1rem;">
             <div>
               <h2 style="margin:0;">Attendees</h2>
@@ -489,10 +518,75 @@
         document.getElementById('dashboardActiveWorkspace').classList.remove('hidden');
 
         refreshMetricsAndUshers();
+        loadViewers();
         loadAttendees();
     }
 
-    // ---------- Attendee List ----------
+    // ---------- Viewers ----------
+    async function loadViewers() {
+      if (!activeEventId) return;
+      const res = await callRPC('get_event_viewers', {
+        p_token: sessionToken,
+        p_event_id: activeEventId
+      });
+      const tbody = document.getElementById('viewerTableBody');
+      const viewers = res.success ? (res.viewers || []) : [];
+      if (viewers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#64748b;">No viewers added yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = '';
+      viewers.forEach(v => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td><strong>${escapeHtml(v.username)}</strong></td>
+          <td>${new Date(v.created_at).toLocaleDateString()}</td>
+          <td style="text-align:right;"><button class="btn-small-danger" data-id="${v.user_id}" data-username="${escapeHtml(v.username)}">Remove</button></td>
+        `;
+        row.querySelector('.btn-small-danger').addEventListener('click', async (e) => {
+          const btn = e.currentTarget;
+          if (!confirm(`Remove viewer "${btn.dataset.username}"?`)) return;
+          const res = await callRPC('delete_event_viewer', { p_token: sessionToken, p_viewer_id: btn.dataset.id });
+          if (res.success) { showToast('Viewer removed'); loadViewers(); }
+          else showToast(res.error || 'Failed to remove', 'error');
+        });
+        tbody.appendChild(row);
+      });
+    }
+
+    document.getElementById('generateViewerPwd').addEventListener('click', (e) => {
+      e.preventDefault();
+      const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+      document.getElementById('viewerPassword').value = Array.from({length: 8}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    });
+
+    document.getElementById('createViewerBtn').addEventListener('click', async () => {
+      const username = document.getElementById('viewerUsername').value.trim();
+      const password = document.getElementById('viewerPassword').value.trim();
+      if (!username) { showToast('Username is required', 'error'); return; }
+      if (!password) { showToast('Password is required', 'error'); return; }
+
+      const btn = document.getElementById('createViewerBtn');
+      btn.disabled = true; btn.textContent = 'Creating...';
+
+      const res = await callRPC('create_event_viewer', {
+        p_token: sessionToken,
+        p_username: username,
+        p_password: password
+      });
+
+      btn.disabled = false; btn.textContent = 'Create Viewer';
+
+      if (!res.success) { showToast(res.error || 'Failed to create', 'error'); return; }
+
+      document.getElementById('newViewerUser').textContent = username;
+      document.getElementById('newViewerPwd').textContent = password;
+      document.getElementById('viewerCredentials').style.display = 'block';
+      document.getElementById('viewerUsername').value = '';
+      document.getElementById('viewerPassword').value = '';
+      showToast(`Viewer "${username}" created`);
+      loadViewers();
+    });
     let allAttendees = [];
 
     async function loadAttendees() {
