@@ -450,6 +450,7 @@
 
         activeEventId = res.event_id;
         document.getElementById('activeEventNameLabel').textContent = res.event_name;
+        document.getElementById('emptyStateContainer').classList.add('hidden');
         document.getElementById('dashboardActiveWorkspace').classList.remove('hidden');
 
         refreshMetricsAndUshers();
