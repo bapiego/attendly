@@ -608,11 +608,13 @@
             document.getElementById('progressBarFill').style.width = `${pct}%`;
         }
 
-        const ushers = await callRPC('get_event_ushers', { p_token: sessionToken, p_event_id: activeEventId });
+        const ushersRes = await callRPC('get_event_ushers', { p_token: sessionToken, p_event_id: activeEventId });
         const tbody = document.getElementById('usherTableBody');
         tbody.innerHTML = '';
 
-        if (!Array.isArray(ushers) || ushers.length === 0) {
+        const ushers = ushersRes.success ? (ushersRes.ushers || []) : [];
+
+        if (ushers.length === 0) {
             tbody.innerHTML = '<tr><td colspan="3" style="color:var(--text-muted); text-align:center;">No ushers added yet.</td></tr>';
             return;
         }
@@ -624,7 +626,7 @@
                 <td><strong>${escapeHtml(usher.username)}</strong></td>
                 <td>${dateStr}</td>
                 <td style="text-align:right;">
-                    <button class="btn-small-danger" data-id="${usher.id}" data-username="${escapeHtml(usher.username)}">Remove</button>
+                    <button class="btn-small-danger" data-id="${usher.user_id}" data-username="${escapeHtml(usher.username)}">Remove</button>
                 </td>
             `;
             tbody.appendChild(row);
