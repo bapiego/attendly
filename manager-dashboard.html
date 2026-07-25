@@ -318,7 +318,6 @@
                     <thead>
                         <tr>
                             <th>Username</th>
-                            <th>Check-ins</th>
                             <th>Added</th>
                             <th></th>
                         </tr>
@@ -624,12 +623,23 @@
             return;
         }
 
+        const hasCheckinData = ushers.some(u => (u.checkin_count || 0) > 0);
+
+        // Update header
+        const thead = document.querySelector('#usherTableBody').closest('table').querySelector('thead tr');
+        thead.innerHTML = `
+            <th>Username</th>
+            ${hasCheckinData ? '<th>Check-ins</th>' : ''}
+            <th>Added</th>
+            <th></th>
+        `;
+
         ushers.forEach(usher => {
             const row = document.createElement('tr');
             const dateStr = new Date(usher.created_at).toLocaleDateString();
             row.innerHTML = `
                 <td><strong>${escapeHtml(usher.username)}</strong></td>
-                <td style="font-weight:700; color:var(--success);">${usher.checkin_count || 0}</td>
+                ${hasCheckinData ? `<td style="font-weight:700; color:var(--success);">${usher.checkin_count || 0}</td>` : ''}
                 <td>${dateStr}</td>
                 <td style="text-align:right;">
                     <button class="btn-small-danger" data-id="${usher.user_id}" data-username="${escapeHtml(usher.username)}">Remove</button>
