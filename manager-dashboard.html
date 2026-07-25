@@ -348,7 +348,38 @@
                 </div>
             </div>
         </div>
-    </div>
+
+        <!-- Attendee List -->
+        <div class="panel-card" style="margin-top:1.5rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:1rem;">
+            <div>
+              <h2 style="margin:0;">Attendees</h2>
+              <p class="subtitle" style="font-size:0.9rem; margin:4px 0 0;">Full list of registered attendees and their check-in status.</p>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <input type="text" id="attendeeSearch" placeholder="Search name or field..." style="padding:7px 12px; border-radius:20px; border:1px solid #334155; background:#1e293b; color:#e2e8f0; font-size:13px; width:200px;">
+              <button class="btn" id="exportAttendeeBtn" style="font-size:13px; padding:7px 16px;">⬇ Export CSV</button>
+              <button class="btn" id="refreshAttendeeBtn" style="font-size:13px; padding:7px 16px; background:#334155;">↻ Refresh</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table id="attendeeTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Custom Fields</th>
+                  <th>Checked In</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="attendeeTableBody">
+                <tr><td colspan="5" style="text-align:center; color:#64748b; padding:2rem;">Loading attendees...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
     </div><!-- end dashboardActiveWorkspace -->
     </div><!-- end checkinWorkspace -->
 
@@ -454,7 +485,83 @@
         document.getElementById('dashboardActiveWorkspace').classList.remove('hidden');
 
         refreshMetricsAndUshers();
+        loadAttendees();
     }
+
+    // ---------- Attendee List ----------
+    let allAttendees = [];
+
+    async function loadAttendees() {
+        if (!activeEventId) return;
+        const tbody = document.getElementById('attendeeTableBody');
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b; padding:2rem;">Loading...</td></tr>';
+
+        const att = await callRPC('search_attendees', {
+            p_token: sessionToken,
+            p_event_id: activeEventId,
+            p_query: ''
+        });
+
+        allAttendees = att.success ? (att.attendees || []) : [];
+        renderAttendeeTable();
+    }
+
+    function renderAttendeeTable() {
+        const tbody = document.getElementById('attendeeTableBody');
+        const search = document.getElementById('attendeeSearch').value.trim().toLowerCase();
+        const filtered = search
+            ? allAttendees.filter(a => JSON.stringify(a).toLowerCase().includes(search))
+            : allAttendees;
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b; padding:2rem;">No attendees found.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = '';
+        filtered.forEach((a, i) => {
+            const checkedIn = a.checked_in;
+            const time = a.checked_in_at
+                ? new Date(a.checked_in_at).toLocaleTimeString('en-GH', {hour:'2-digit', minute:'2-digit'})
+                : '—';
+            const fieldCells = Object.values(a.field_values || {})
+                .map(v => `<td style="font-size:13px;">${v || '—'}</td>`).join('');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="color:#64748b;">${i+1}</td>
+                <td><strong>${a.name || '—'}</strong></td>
+                ${fieldCells}
+                <td style="color:${checkedIn ? 'var(--success)' : '#64748b'}; font-weight:600;">${checkedIn ? '✓ Yes' : 'No'}</td>
+                <td style="font-size:12px; color:#64748b;">${time}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    document.getElementById('attendeeSearch').addEventListener('input', renderAttendeeTable);
+    document.getElementById('refreshAttendeeBtn').addEventListener('click', loadAttendees);
+
+    document.getElementById('exportAttendeeBtn').addEventListener('click', () => {
+        if (!allAttendees.length) return;
+        const rows = [['#', 'Name', ...Object.keys(allAttendees[0]?.field_values || {}), 'Checked In', 'Time']];
+        allAttendees.forEach((a, i) => {
+            rows.push([
+                i + 1,
+                a.name || '',
+                ...Object.values(a.field_values || {}),
+                a.checked_in ? 'Yes' : 'No',
+                a.checked_in_at ? new Date(a.checked_in_at).toLocaleString() : ''
+            ]);
+        });
+        const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${document.getElementById('activeEventNameLabel').textContent}_attendees.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    });
 
     async function refreshMetricsAndUshers() {
         if (!activeEventId) return;
