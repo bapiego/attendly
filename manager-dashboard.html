@@ -78,6 +78,8 @@
             margin-top: 1rem;
             overflow: hidden;
         }
+        .hidden { display: none !important; }
+        #loadingWorkspace { display: none; }
         .progress-bar {
             background-color: var(--success);
             height: 100%;
@@ -465,11 +467,13 @@
 
     // ---------- Load dashboard state ----------
     async function loadDashboard() {
+        const loadingEl = document.getElementById('loadingWorkspace');
+        loadingEl.style.display = 'block';
         const res = await callRPC('get_my_active_event', { p_token: sessionToken });
-        document.getElementById('loadingWorkspace').classList.add('hidden');
+        loadingEl.style.display = 'none';
 
         if (!res.success) {
-            document.getElementById('loadingWorkspace').classList.remove('hidden');
+            document.getElementById('loadingWorkspace').style.display = 'block';
             document.getElementById('loadingWorkspace').textContent = res.error || 'Failed to load dashboard';
             return;
         }
