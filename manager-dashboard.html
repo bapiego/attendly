@@ -502,22 +502,35 @@
             p_query: ''
         });
 
-        // search_attendees returns an array of tuples, not a JSON object
-        if (!Array.isArray(res)) {
+        console.log('search_attendees response:', JSON.stringify(res).substring(0, 500));
+
+        // Handle both array and wrapped responses
+        let rows = [];
+        if (Array.isArray(res)) {
+            rows = res;
+        } else if (res && Array.isArray(res.attendees)) {
+            rows = res.attendees;
+        } else if (res && res.success === false) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#64748b; padding:2rem;">Error: ${res.error || 'Unknown error'}</td></tr>`;
+            return;
+        } else {
             tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b; padding:2rem;">Failed to load attendees.</td></tr>';
             return;
         }
 
         // Parse tuples into objects
-        allAttendees = res.map(row => {
+        allAttendees = rows.map(row => {
             const fields = typeof row.field_values === 'string'
                 ? JSON.parse(row.field_values)
                 : (row.field_values || {});
+            // Build display name from available fields
+            const name = [fields.first_name, fields.last_name].filter(Boolean).join(' ')
+                || fields.name || row.name || '—';
             return {
                 id: row.id,
-                name: `${fields.first_name || ''} ${fields.last_name || ''}`.trim() || fields.name || '—',
+                name,
                 field_values: fields,
-                checked_in: row.checked_in === true || row.checked_in === 't',
+                checked_in: row.checked_in === true || row.checked_in === 't' || row.checked_in === 'true',
                 checked_in_at: row.checked_in_at || null
             };
         });
