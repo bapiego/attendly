@@ -507,14 +507,16 @@
         }
 
         allAttendees = (res.attendees || []).map(row => {
-            const fields = typeof row.data === 'string'
-                ? JSON.parse(row.data)
-                : (row.data || {});
-            const name = [fields.first_name, fields.last_name].filter(Boolean).join(' ')
-                || fields.name || '—';
+            let fields = {};
+            try {
+                fields = typeof row.data === 'string'
+                    ? JSON.parse(row.data)
+                    : (row.data || {});
+            } catch(e) { fields = {}; }
+            const name = (fields.first_name || '') + ' ' + (fields.last_name || '');
             return {
                 id: row.id,
-                name,
+                name: name.trim() || '—',
                 field_values: fields,
                 checked_in: row.checked_in === true || row.checked_in === 't' || row.checked_in === 'true',
                 checked_in_at: row.checked_in_at || null
