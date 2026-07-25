@@ -496,13 +496,32 @@
         const tbody = document.getElementById('attendeeTableBody');
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b; padding:2rem;">Loading...</td></tr>';
 
-        const att = await callRPC('search_attendees', {
+        const res = await callRPC('search_attendees', {
             p_token: sessionToken,
             p_event_id: activeEventId,
             p_query: ''
         });
 
-        allAttendees = att.success ? (att.attendees || []) : [];
+        // search_attendees returns an array of tuples, not a JSON object
+        if (!Array.isArray(res)) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b; padding:2rem;">Failed to load attendees.</td></tr>';
+            return;
+        }
+
+        // Parse tuples into objects
+        allAttendees = res.map(row => {
+            const fields = typeof row.field_values === 'string'
+                ? JSON.parse(row.field_values)
+                : (row.field_values || {});
+            return {
+                id: row.id,
+                name: `${fields.first_name || ''} ${fields.last_name || ''}`.trim() || fields.name || '—',
+                field_values: fields,
+                checked_in: row.checked_in === true || row.checked_in === 't',
+                checked_in_at: row.checked_in_at || null
+            };
+        });
+
         renderAttendeeTable();
     }
 
@@ -518,19 +537,29 @@
             return;
         }
 
+        // Update headers based on first row's fields (excluding name parts already in Name column)
+        if (allAttendees.length > 0) {
+            const thead = document.querySelector('#attendeeTable thead tr');
+            const fields = allAttendees[0].field_values;
+            const extraFields = Object.keys(fields).filter(k => !['first_name','last_name','name'].includes(k));
+            thead.innerHTML = '<th>#</th><th>Name</th>' +
+                extraFields.map(k => `<th>${k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</th>`).join('') +
+                '<th>Checked In</th><th>Time</th>';
+        }
+
         tbody.innerHTML = '';
         filtered.forEach((a, i) => {
+            const fields = a.field_values;
+            const extraFields = Object.keys(fields).filter(k => !['first_name','last_name','name'].includes(k));
             const checkedIn = a.checked_in;
             const time = a.checked_in_at
                 ? new Date(a.checked_in_at).toLocaleTimeString('en-GH', {hour:'2-digit', minute:'2-digit'})
                 : '—';
-            const fieldCells = Object.values(a.field_values || {})
-                .map(v => `<td style="font-size:13px;">${v || '—'}</td>`).join('');
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td style="color:#64748b;">${i+1}</td>
-                <td><strong>${a.name || '—'}</strong></td>
-                ${fieldCells}
+                <td><strong>${a.name}</strong></td>
+                ${extraFields.map(k => `<td style="font-size:13px;">${fields[k] || '—'}</td>`).join('')}
                 <td style="color:${checkedIn ? 'var(--success)' : '#64748b'}; font-weight:600;">${checkedIn ? '✓ Yes' : 'No'}</td>
                 <td style="font-size:12px; color:#64748b;">${time}</td>
             `;
